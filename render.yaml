@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: rushes-worker
+    runtime: node
+    rootDir: worker
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: WORKER_SECRET
+        generateValue: true

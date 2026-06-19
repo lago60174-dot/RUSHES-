@@ -96,7 +96,7 @@ function dayDiff(dateStr) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const d = new Date(dateStr + "T00:00:00");
-  return Math.round((d - today) / 86400000);
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
 }
 
 function getBucket(video) {

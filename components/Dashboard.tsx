@@ -1040,7 +1040,7 @@ function ToggleButton({ active, onClick, label }) {
   );
 }
 
-function StatField({ label, value, onChange, placeholder }) {
+function StatField({ label, value, onChange, placeholder = "" }) {
   return (
     <div>
       <label className="text-xs uppercase block mb-1" style={{ color: C.textSecondary }}>

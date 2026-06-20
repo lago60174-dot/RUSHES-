@@ -1617,7 +1617,7 @@ function ClipsView({ zernioAccounts, onVideoPublished }) {
   contentType: file.type || "video/mp4",
 });
 setUploadProgress(100);
-          if (error) reject(error); else resolve();
+         if (error) reject(error); else resolve(undefined);
         };
         reader.onerror = reject;
         reader.readAsArrayBuffer(file);

@@ -1613,10 +1613,10 @@ function ClipsView({ zernioAccounts, onVideoPublished }) {
         const reader = new FileReader();
         reader.onload = async (ev) => {
           const buf = ev.target.result;
-          const { error } = await sb.storage.from("videos").upload(storagePath, buf, {
-            contentType: file.type || "video/mp4",
-            onUploadProgress: (p) => setUploadProgress(Math.round((p.loaded / p.total) * 100)),
-          });
+         const { error } = await sb.storage.from("videos").upload(storagePath, buf, {
+  contentType: file.type || "video/mp4",
+});
+setUploadProgress(100);
           if (error) reject(error); else resolve();
         };
         reader.onerror = reject;

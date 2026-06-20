@@ -659,7 +659,7 @@ function SummaryCard({ label, value, suffix = "" }) {
   );
 }
 
-function FilterPill({ active, onClick, label, color }) {
+function FilterPill({ active, onClick, label, color = undefined }) {
   return (
     <button
       onClick={onClick}

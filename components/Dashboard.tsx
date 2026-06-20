@@ -645,7 +645,7 @@ function VideoCard({ video, onPublish, onEdit, hasZernio, onZernioPublish }) {
   );
 }
 
-function SummaryCard({ label, value, suffix }) {
+function SummaryCard({ label, value, suffix = "" }) {
   return (
     <div className="rounded-xl p-4" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
       <div className="text-2xl" style={{ fontFamily: FONT_MONO, color: C.amber }}>

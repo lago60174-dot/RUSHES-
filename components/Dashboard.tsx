@@ -926,7 +926,7 @@ function HistoryView({ videos }) {
     byPlatform[v.platform].sum += v.views || 0;
     byPlatform[v.platform].count += 1;
   });
-  const platformAvgs = Object.entries(byPlatform).map(([key, d]) => ({ key, avg: d.sum / d.count }));
+  const platformAvgs = Object.entries(byPlatform).map(([key, d]: [string, {sum: number; count: number}]) => ({ key, avg: d.sum / d.count }));
   const bestPlatform = platformAvgs.length >= 2 ? platformAvgs.sort((a, b) => b.avg - a.avg)[0] : null;
 
   const byHour = {};
@@ -937,7 +937,7 @@ function HistoryView({ videos }) {
     byHour[hb].sum += v.views || 0;
     byHour[hb].count += 1;
   });
-  const hourAvgs = Object.entries(byHour).map(([key, d]) => ({ key, avg: d.sum / d.count }));
+  const hourAvgs = Object.entries(byHour).map(([key, d]: [string, {sum: number; count: number}]) => ({ key, avg: d.sum / d.count }));
   const bestHour = hourAvgs.length >= 2 ? hourAvgs.sort((a, b) => b.avg - a.avg)[0] : null;
 
   const withDuration = published.filter((v) => v.durationSeconds > 0);

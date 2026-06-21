@@ -7,7 +7,9 @@ import { DashboardView } from "./dashboard/DashboardView";
 import { HistoryView } from "./history/HistoryView";
 import { AIAnalysisView } from "./ai/AIAnalysisView";
 import { ClipsView } from "./clips/ClipsView";
+import { LibraryView } from "./library/LibraryView";
 import { VideoModal, ZernioPublishModal } from "./modals/Modals";
+import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
@@ -146,6 +148,12 @@ export default function Dashboard() {
     setModalMode("publish");
   }
 
+  async function handleLogout() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  }
+
   if (isLoading) {
     return (
       <div style={{ background: C.bg, minHeight: "100vh" }} className="flex items-center justify-center">
@@ -201,11 +209,16 @@ export default function Dashboard() {
             ))}
           </nav>
 
-          <div className="p-4 pb-6">
+          <div className="p-4 pb-6 space-y-2">
             <button onClick={() => { setForm(emptyForm()); setModalMode("add"); }}
               className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all"
               style={{ background: `linear-gradient(135deg, ${C.violet}, #4F1D96)`, color: "#fff" }}>
               + Ajouter une vidéo
+            </button>
+            <button onClick={handleLogout}
+              className="w-full py-2.5 rounded-xl text-sm font-medium transition-all"
+              style={{ background: C.card, color: C.textSecondary, border: `1px solid ${C.border}` }}>
+              ⏻ Déconnexion
             </button>
           </div>
         </aside>
@@ -222,11 +235,18 @@ export default function Dashboard() {
               </div>
               <span className="font-bold text-sm tracking-wider" style={{ color: C.textPrimary }}>RUSHES</span>
             </div>
-            <button onClick={() => { setForm(emptyForm()); setModalMode("add"); }}
-              className="text-xs px-3 py-1.5 rounded-lg font-semibold"
-              style={{ background: `linear-gradient(135deg, ${C.violet}, #4F1D96)`, color: "#fff" }}>
-              + Ajouter
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => { setForm(emptyForm()); setModalMode("add"); }}
+                className="text-xs px-3 py-1.5 rounded-lg font-semibold"
+                style={{ background: `linear-gradient(135deg, ${C.violet}, #4F1D96)`, color: "#fff" }}>
+                + Ajouter
+              </button>
+              <button onClick={handleLogout} aria-label="Déconnexion"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-sm"
+                style={{ background: C.card, color: C.textSecondary, border: `1px solid ${C.border}` }}>
+                ⏻
+              </button>
+            </div>
           </div>
 
           {/* Mobile tabs */}
@@ -274,6 +294,7 @@ export default function Dashboard() {
                 <ClipsView zernioAccounts={zernioAccounts}
                   onVideoPublished={v => setVideos(prev => [...prev, v])} />
               )}
+              {activeTab === "library" && <LibraryView />}
             </div>
           </div>
         </main>

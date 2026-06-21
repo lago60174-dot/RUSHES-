@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "RUSHES",
   description: "Centre de contrôle contenu",
+  icons: { icon: "/icon.svg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -15,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body style={{ margin: 0, background: "#14141A" }}>{children}</body>
+      <body style={{ margin: 0, background: "#07090F" }}>{children}</body>
     </html>
   );
 }

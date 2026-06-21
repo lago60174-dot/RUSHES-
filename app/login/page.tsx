@@ -57,6 +57,8 @@ export default function LoginPage() {
       setLoading(false);
       if (error) {
         setError("Email ou mot de passe incorrect.");
+      } else {
+        window.location.href = "/";
       }
     } else {
       const { error } = await supabase.auth.signUp({
@@ -71,9 +73,7 @@ export default function LoginPage() {
           setError(error.message);
         }
       } else {
-        setSuccessMsg(
-          "Compte créé ! Vérifie ton email pour confirmer ton inscription, puis connecte-toi."
-        );
+        setSuccessMsg("Compte créé ! Tu peux maintenant te connecter.");
         switchMode("login");
       }
     }
@@ -138,15 +138,7 @@ export default function LoginPage() {
         </div>
 
         {/* Tabs */}
-        <div
-          style={{
-            display: "flex",
-            background: C.card,
-            borderRadius: 12,
-            padding: 4,
-            marginBottom: 28,
-          }}
-        >
+        <div style={{ display: "flex", background: C.card, borderRadius: 12, padding: 4, marginBottom: 28 }}>
           {(["login", "signup"] as Mode[]).map((m) => (
             <button
               key={m}
@@ -172,35 +164,14 @@ export default function LoginPage() {
 
         {/* Success */}
         {successMsg && (
-          <div
-            style={{
-              background: "#064E3B",
-              border: "1px solid #059669",
-              borderRadius: 10,
-              padding: "10px 14px",
-              marginBottom: 20,
-              color: C.success,
-              fontSize: "0.82rem",
-              lineHeight: 1.5,
-            }}
-          >
+          <div style={{ background: "#064E3B", border: "1px solid #059669", borderRadius: 10, padding: "10px 14px", marginBottom: 20, color: C.success, fontSize: "0.82rem", lineHeight: 1.5 }}>
             {successMsg}
           </div>
         )}
 
         {/* Error */}
         {error && (
-          <div
-            style={{
-              background: "#450A0A",
-              border: "1px solid #991B1B",
-              borderRadius: 10,
-              padding: "10px 14px",
-              marginBottom: 20,
-              color: C.error,
-              fontSize: "0.82rem",
-            }}
-          >
+          <div style={{ background: "#450A0A", border: "1px solid #991B1B", borderRadius: 10, padding: "10px 14px", marginBottom: 20, color: C.error, fontSize: "0.82rem" }}>
             {error}
           </div>
         )}

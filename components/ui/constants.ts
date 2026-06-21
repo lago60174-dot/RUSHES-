@@ -47,6 +47,7 @@ export const TABS = [
   { key: "history",   label: "Historique",      icon: "🏆" },
   { key: "ai",        label: "Analyse IA",      icon: "✦" },
   { key: "clips",     label: "Découpage",       icon: "✂" },
+  { key: "library",   label: "Médiathèque",     icon: "🎞" },
 ];
 
 export const MIN_VIDEOS_FOR_ANALYSIS = 5;

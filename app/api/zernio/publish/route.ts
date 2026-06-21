@@ -8,26 +8,36 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const { videoId, caption, accountId, platform, videoUrl, scheduledFor } = body;
+  const { videoId, caption, videoUrl, scheduledFor } = body;
 
-  if (!videoId || !caption || !accountId || !platform) {
+  // Multi-plateforme : `targets` est une liste de { platform, accountId }.
+  // On garde la compatibilité avec l'ancien format { platform, accountId } unique.
+  const targets: Array<{ platform: string; accountId: string }> =
+    Array.isArray(body.targets) && body.targets.length > 0
+      ? body.targets
+      : body.accountId && body.platform
+        ? [{ platform: body.platform, accountId: body.accountId }]
+        : [];
+
+  if (!videoId || !caption || targets.length === 0) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
   try {
     const post = await zernioCreatePost({
       content: caption,
-      platforms: [{ platform, accountId }],
+      platforms: targets,
       mediaUrl: videoUrl || undefined,
       scheduledFor: scheduledFor || undefined,
     });
 
-    // Store zernio post id + account id on the video record
+    // Store zernio post id + every target platform/account on the video record
     const { error } = await supabase
       .from("videos")
       .update({
         zernio_post_id: post._id,
-        zernio_account_id: accountId,
+        zernio_account_id: targets[0].accountId,
+        zernio_targets: targets,
         video_url: videoUrl || null,
         status: scheduledFor ? "planned" : "published",
         published_date: scheduledFor ? null : new Date().toISOString().slice(0, 10),
@@ -38,7 +48,7 @@ export async function POST(request: Request) {
 
     if (error) throw new Error(error.message);
 
-    return NextResponse.json({ postId: post._id });
+    return NextResponse.json({ postId: post._id, targets });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

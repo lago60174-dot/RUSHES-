@@ -111,3 +111,34 @@ export function mapZernioAnalytics(
     completionRate: d.completionRate ?? 0,
   };
 }
+
+// Same as mapZernioAnalytics, but sums metrics across several platforms —
+// used when a single post was published simultaneously to multiple networks.
+// avgWatchTime / completionRate are averaged rather than summed.
+export function mapZernioAnalyticsMulti(
+  platformData: Record<string, unknown>,
+  platforms: string[]
+) {
+  const list = platforms.length ? platforms : Object.keys(platformData);
+  const totals = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0, newFollowers: 0, avgWatchTime: 0, completionRate: 0 };
+  let watchSamples = 0;
+  for (const platform of list) {
+    const m = mapZernioAnalytics(platformData, platform);
+    totals.views += m.views;
+    totals.likes += m.likes;
+    totals.comments += m.comments;
+    totals.shares += m.shares;
+    totals.saves += m.saves;
+    totals.newFollowers += m.newFollowers;
+    if (m.avgWatchTime || m.completionRate) {
+      totals.avgWatchTime += m.avgWatchTime;
+      totals.completionRate += m.completionRate;
+      watchSamples += 1;
+    }
+  }
+  if (watchSamples > 0) {
+    totals.avgWatchTime = totals.avgWatchTime / watchSamples;
+    totals.completionRate = totals.completionRate / watchSamples;
+  }
+  return totals;
+}

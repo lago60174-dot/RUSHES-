@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { zernioGetPostAnalytics, mapZernioAnalytics } from "@/lib/zernio";
+import { zernioGetPostAnalytics, mapZernioAnalyticsMulti } from "@/lib/zernio";
 
 export async function GET(
   _: Request,
@@ -13,7 +13,7 @@ export async function GET(
   // Fetch the video to get zernio_post_id
   const { data: video, error: fetchError } = await supabase
     .from("videos")
-    .select("zernio_post_id, platform")
+    .select("zernio_post_id, platform, zernio_targets")
     .eq("id", params.videoId)
     .eq("user_id", user.id)
     .single();
@@ -27,7 +27,11 @@ export async function GET(
 
   try {
     const analytics = await zernioGetPostAnalytics(video.zernio_post_id);
-    const mapped = mapZernioAnalytics(analytics.platforms, video.platform);
+    const targetPlatforms: string[] =
+      Array.isArray(video.zernio_targets) && video.zernio_targets.length > 0
+        ? video.zernio_targets.map((t: { platform: string }) => t.platform)
+        : [video.platform];
+    const mapped = mapZernioAnalyticsMulti(analytics.platforms, targetPlatforms);
 
     const { error: updateError } = await supabase
       .from("videos")

@@ -20,6 +20,7 @@ export type Video = {
   completionRate: number;
   zernioPostId?: string;
   zernioAccountId?: string;
+  zernioTargets?: Array<{ platform: string; accountId: string }>;
   zernioSyncedAt?: string;
   videoUrl?: string;
 };

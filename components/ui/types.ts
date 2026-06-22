@@ -32,25 +32,6 @@ export type ZernioAccount = {
   username: string;
 };
 
-export type ClipJob = {
-  id: string;
-  status: "pending" | "processing" | "done" | "error";
-  video_name: string;
-  clips: Clip[] | null;
-  error?: string;
-  created_at: string;
-};
-
-export type Clip = {
-  url: string;
-  hook: string;
-  reason: string;
-  startTime: number;
-  endTime: number;
-  duration: number;
-  captions: Record<string, { caption: string; hashtags: string }>;
-};
-
 export type AIMeta = {
   generatedAt: string;
   videoCount: number;

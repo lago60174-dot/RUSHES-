@@ -2,6 +2,7 @@
 import React from "react";
 import { C, FONT_MONO, PLATFORMS } from "../ui/constants";
 import { Video } from "../ui/types";
+import { compressVideoFile, inspectVideo, MAX_VIDEO_SIZE_MB, MAX_VIDEO_SIZE_BYTES, MAX_VIDEO_DURATION_SECONDS } from "../../lib/videoCompression";
 
 type LibraryItem = {
   path: string;
@@ -32,31 +33,60 @@ function AddVideoModal({
 }: {
   file: File;
   onClose: () => void;
-  onDone: (item: LibraryItem, videoRecord: Video) => void;
+  onDone: (item: LibraryItem, videoRecords: Video[]) => void;
 }) {
   const defaultTitle = file.name.replace(/\.[^/.]+$/, "");
   const [title, setTitle] = React.useState(defaultTitle);
-  const [platform, setPlatform] = React.useState("tiktok");
+  const [platforms, setPlatforms] = React.useState<string[]>(["tiktok"]);
   const [scheduledDate, setScheduledDate] = React.useState(todayStr());
   const [scheduledTime, setScheduledTime] = React.useState("18:00");
   const [uploading, setUploading] = React.useState(false);
   const [progress, setProgress] = React.useState(0);
+  const [stage, setStage] = React.useState<"idle" | "compressing" | "uploading">("idle");
   const [error, setError] = React.useState("");
+  const [checking, setChecking] = React.useState(true);
+  const [needsCompression, setNeedsCompression] = React.useState(false);
+  const [fileInfo, setFileInfo] = React.useState<{ sizeMB: number; duration: number } | null>(null);
+
+  React.useEffect(() => {
+    inspectVideo(file).then((info) => {
+      setNeedsCompression(info.needed);
+      setFileInfo({ sizeMB: info.originalSizeMB, duration: info.originalDuration });
+      setChecking(false);
+    }).catch(() => setChecking(false));
+  }, [file]);
 
   const inputStyle: React.CSSProperties = {
     background: C.surface, border: `1px solid ${C.border}`, color: C.textPrimary,
     outline: "none", borderRadius: 12, padding: "10px 14px", width: "100%", fontSize: "0.875rem",
   };
 
+  function togglePlatform(key: string) {
+    setPlatforms((prev) => {
+      if (prev.includes(key)) return prev.length > 1 ? prev.filter((p) => p !== key) : prev;
+      return [...prev, key];
+    });
+  }
+
   async function handleConfirm() {
     if (!title.trim()) return;
     setUploading(true); setProgress(0); setError("");
     try {
+      let uploadFile: File = file;
+      if (needsCompression) {
+        setStage("compressing");
+        uploadFile = await compressVideoFile(file, (pct) => setProgress(pct));
+        if (uploadFile.size > MAX_VIDEO_SIZE_BYTES) {
+          throw new Error(`Le fichier compressé dépasse encore ${MAX_VIDEO_SIZE_MB} Mo (${(uploadFile.size / (1024 * 1024)).toFixed(1)} Mo). Essaie une vidéo plus courte.`);
+        }
+      }
+
+      setStage("uploading"); setProgress(0);
       const sessionRes = await fetch("/api/storage/token");
       const { url, key, userId } = await sessionRes.json();
       const { createClient } = await import("@supabase/supabase-js");
       const sb = createClient(url, key);
-      const ext = file.name.split(".").pop();
+      const ext = uploadFile.name.split(".").pop();
       const storagePath = `${userId}/${Date.now()}.${ext}`;
 
       const signedUrl: string = await new Promise((resolve, reject) => {
@@ -64,7 +94,7 @@ function AddVideoModal({
         reader.onload = async (ev) => {
           const buf = ev.target?.result;
           setProgress(50);
-          const { error: uploadError } = await sb.storage.from("videos").upload(storagePath, buf as ArrayBuffer, { contentType: file.type || "video/mp4" });
+          const { error: uploadError } = await sb.storage.from("videos").upload(storagePath, buf as ArrayBuffer, { contentType: uploadFile.type || "video/mp4" });
           if (uploadError) { reject(uploadError); return; }
           const { data: signed, error: signError } = await sb.storage.from("videos").createSignedUrl(storagePath, 60 * 60);
           setProgress(100);
@@ -72,27 +102,29 @@ function AddVideoModal({
           resolve(signed.signedUrl);
         };
         reader.onerror = reject;
-        reader.readAsArrayBuffer(file);
+        reader.readAsArrayBuffer(uploadFile);
       });
 
-      // Crée automatiquement la fiche vidéo dans le calendrier
-      const videoRecord: Video = {
+      // Crée automatiquement une fiche vidéo par plateforme sélectionnée
+      const videoRecords: Video[] = platforms.map((platform) => ({
         id: uid(), platform, title: title.trim(), hashtags: "", notes: "",
         status: "planned", scheduledDate, scheduledTime,
         durationSeconds: 0, views: 0, likes: 0, comments: 0, shares: 0, saves: 0,
         newFollowers: 0, avgWatchTime: 0, completionRate: 0, videoUrl: signedUrl,
-      };
-      const res = await fetch("/api/videos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(videoRecord) });
-      if (!res.ok) throw new Error((await res.json()).error);
+      }));
+      await Promise.all(videoRecords.map(async (videoRecord) => {
+        const res = await fetch("/api/videos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(videoRecord) });
+        if (!res.ok) throw new Error((await res.json()).error);
+      }));
 
       onDone({
-        path: storagePath, name: storagePath.split("/").pop() || file.name,
-        size: file.size, mimetype: file.type, createdAt: new Date().toISOString(), url: signedUrl,
-      }, videoRecord);
+        path: storagePath, name: storagePath.split("/").pop() || uploadFile.name,
+        size: uploadFile.size, mimetype: uploadFile.type, createdAt: new Date().toISOString(), url: signedUrl,
+      }, videoRecords);
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setUploading(false); setProgress(0);
+      setUploading(false); setProgress(0); setStage("idle");
     }
   }
 
@@ -106,25 +138,42 @@ function AddVideoModal({
         <div className="px-6 pb-6 space-y-4">
           <div className="text-xs truncate" style={{ color: C.textMuted, fontFamily: FONT_MONO }}>{file.name} · {formatSize(file.size)}</div>
 
+          {!checking && needsCompression && fileInfo && (
+            <div className="text-xs rounded-xl p-3" style={{ background: C.violetBg, color: C.violetLight }}>
+              ⚙️ Cette vidéo ({fileInfo.sizeMB.toFixed(1)} Mo, {Math.round(fileInfo.duration)}s) dépasse les limites
+              ({MAX_VIDEO_SIZE_MB} Mo / {MAX_VIDEO_DURATION_SECONDS}s). Elle sera automatiquement compressée et
+              tronquée avant l'envoi.
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: C.textMuted, fontFamily: FONT_MONO }}>Titre</label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: C.textMuted, fontFamily: FONT_MONO }}>Plateforme</label>
+            <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ color: C.textMuted, fontFamily: FONT_MONO }}>Plateformes (sélection multiple)</label>
             <div className="flex gap-2 flex-wrap">
-              {Object.entries(PLATFORMS).map(([key, p]) => (
-                <button key={key} onClick={() => setPlatform(key)} className="text-xs px-3 py-2 rounded-xl font-semibold transition-all"
-                  style={{
-                    background: platform === key ? `${p.color}20` : C.surface,
-                    color: platform === key ? p.color : C.textSecondary,
-                    border: `1px solid ${platform === key ? p.color + "60" : C.border}`,
-                  }}>
-                  {p.label}
-                </button>
-              ))}
+              {Object.entries(PLATFORMS).map(([key, p]) => {
+                const active = platforms.includes(key);
+                return (
+                  <button key={key} onClick={() => togglePlatform(key)} className="text-xs px-3 py-2 rounded-xl font-semibold transition-all flex items-center gap-1.5"
+                    style={{
+                      background: active ? `${p.color}20` : C.surface,
+                      color: active ? p.color : C.textSecondary,
+                      border: `1px solid ${active ? p.color + "60" : C.border}`,
+                    }}>
+                    <span style={{ opacity: active ? 1 : 0.4 }}>{active ? "☑" : "☐"}</span>
+                    {p.label}
+                  </button>
+                );
+              })}
             </div>
+            {platforms.length > 1 && (
+              <div className="text-xs mt-2" style={{ color: C.textMuted }}>
+                Une fiche distincte sera créée pour chaque plateforme sélectionnée.
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -142,10 +191,10 @@ function AddVideoModal({
         </div>
         <div className="flex items-center justify-end gap-2 px-6 py-4" style={{ borderTop: `1px solid ${C.border}` }}>
           <button onClick={onClose} className="text-sm px-4 py-2 rounded-xl" style={{ color: C.textSecondary, border: `1px solid ${C.border}`, background: C.surface }}>Annuler</button>
-          <button onClick={handleConfirm} disabled={uploading || !title.trim()}
+          <button onClick={handleConfirm} disabled={uploading || checking || !title.trim()}
             className="text-sm px-5 py-2 rounded-xl font-semibold"
-            style={{ background: `linear-gradient(135deg, ${C.violet}, #5B21B6)`, color: "#fff", opacity: uploading || !title.trim() ? 0.6 : 1 }}>
-            {uploading ? `Upload… ${progress}%` : "Ajouter au calendrier"}
+            style={{ background: `linear-gradient(135deg, ${C.violet}, #5B21B6)`, color: "#fff", opacity: uploading || checking || !title.trim() ? 0.6 : 1 }}>
+            {checking ? "Analyse…" : stage === "compressing" ? `Compression… ${progress}%` : stage === "uploading" ? `Upload… ${progress}%` : platforms.length > 1 ? `Ajouter à ${platforms.length} réseaux` : "Ajouter au calendrier"}
           </button>
         </div>
       </div>
@@ -153,7 +202,7 @@ function AddVideoModal({
   );
 }
 
-export function LibraryView({ onVideoAdded }: { onVideoAdded: (v: Video) => void }) {
+export function LibraryView({ onVideoAdded }: { onVideoAdded: (videos: Video[]) => void }) {
   const [items, setItems] = React.useState<LibraryItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -232,8 +281,7 @@ export function LibraryView({ onVideoAdded }: { onVideoAdded: (v: Video) => void
         <div className="rounded-2xl p-8 text-center" style={{ background: C.card, border: `1px solid ${C.border}` }}>
           <div className="text-2xl mb-2">🎞</div>
           <div className="text-sm" style={{ color: C.textSecondary }}>
-            Aucune vidéo uploadée pour le moment. Clique sur « + Ajouter une vidéo » ou utilise
-            le découpage IA / la publication pour en envoyer une.
+            Aucune vidéo uploadée pour le moment. Clique sur « + Ajouter une vidéo » pour en envoyer une.
           </div>
         </div>
       ) : (
@@ -274,10 +322,10 @@ export function LibraryView({ onVideoAdded }: { onVideoAdded: (v: Video) => void
 
       {pendingFile && (
         <AddVideoModal file={pendingFile} onClose={() => setPendingFile(null)}
-          onDone={(item, videoRecord) => {
+          onDone={(item, videoRecords) => {
             setItems((prev) => [item, ...prev]);
             setPendingFile(null);
-            onVideoAdded(videoRecord);
+            onVideoAdded(videoRecords);
           }} />
       )}
     </div>

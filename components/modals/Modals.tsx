@@ -48,13 +48,23 @@ export function VideoModal({
   saving: boolean;
 }) {
   const isPublish = mode === "publish";
+  const isAdd = mode === "add";
   const isPublished = form.entryType === "published";
   function set(key: string, val: string) { setForm({ ...form, [key]: val }); }
+
+  const selectedPlatforms = (form.platforms || form.platform || "").split(",").map(p => p.trim()).filter(Boolean);
+  function togglePlatform(key: string) {
+    const next = selectedPlatforms.includes(key)
+      ? selectedPlatforms.filter(p => p !== key)
+      : [...selectedPlatforms, key];
+    if (next.length === 0) return; // au moins une plateforme
+    setForm({ ...form, platforms: next.join(","), platform: next[0] });
+  }
 
   const titles: Record<string, string> = { add: "Ajouter une vidéo", edit: "Modifier", publish: "Marquer publiée" };
   const saveLabels: Record<string, string> = {
     publish: "Marquer publiée",
-    add: isPublished ? "Ajouter" : "Ajouter au calendrier",
+    add: isPublished ? "Ajouter" : selectedPlatforms.length > 1 ? `Ajouter à ${selectedPlatforms.length} réseaux` : "Ajouter au calendrier",
     edit: "Enregistrer",
   };
 
@@ -71,20 +81,29 @@ export function VideoModal({
 
         <div className="px-6 pb-6 space-y-5">
           {/* Platform */}
-          <Field label="Plateforme">
+          <Field label={isAdd ? "Plateformes (sélection multiple)" : "Plateforme"}>
             <div className="flex gap-2 flex-wrap">
-              {Object.entries(PLATFORMS).map(([key, p]) => (
-                <button key={key} onClick={() => set("platform", key)}
-                  className="text-xs px-3 py-2 rounded-xl font-semibold transition-all"
-                  style={{
-                    background: form.platform === key ? `${p.color}20` : C.card,
-                    color: form.platform === key ? p.color : C.textSecondary,
-                    border: `1px solid ${form.platform === key ? p.color + "60" : C.border}`,
-                  }}>
-                  {p.label}
-                </button>
-              ))}
+              {Object.entries(PLATFORMS).map(([key, p]) => {
+                const active = isAdd ? selectedPlatforms.includes(key) : form.platform === key;
+                return (
+                  <button key={key} onClick={() => isAdd ? togglePlatform(key) : set("platform", key)}
+                    className="text-xs px-3 py-2 rounded-xl font-semibold transition-all flex items-center gap-1.5"
+                    style={{
+                      background: active ? `${p.color}20` : C.card,
+                      color: active ? p.color : C.textSecondary,
+                      border: `1px solid ${active ? p.color + "60" : C.border}`,
+                    }}>
+                    {isAdd && <span style={{ opacity: active ? 1 : 0.4 }}>{active ? "☑" : "☐"}</span>}
+                    {p.label}
+                  </button>
+                );
+              })}
             </div>
+            {isAdd && selectedPlatforms.length > 1 && (
+              <div className="text-xs mt-2" style={{ color: C.textMuted }}>
+                Une fiche distincte sera créée pour chaque plateforme sélectionnée.
+              </div>
+            )}
           </Field>
 
           <Field label="Titre">
@@ -175,7 +194,7 @@ export function VideoModal({
   );
 }
 
-// ── ZernioPublishModal ────────────────────────────────────────────────────────
+import { compressVideoFile, inspectVideo, MAX_VIDEO_SIZE_BYTES } from "../../lib/videoCompression";
 export function ZernioPublishModal({
   video, accounts, onClose, onSuccess,
 }: {
@@ -220,22 +239,34 @@ export function ZernioPublishModal({
     setSelected((prev) => ({ ...prev, [platformKey]: accountId }));
   }
 
+  const [stage, setStage] = React.useState<"idle" | "compressing" | "uploading">("idle");
+
   async function handleFileUpload(file: File) {
     if (file.size > 500 * 1024 * 1024) { setError("Le fichier dépasse 500 Mo"); return; }
     setUploading(true); setUploadProgress(0); setError("");
     try {
+      let uploadFile = file;
+      const info = await inspectVideo(file).catch(() => null);
+      if (info?.needed) {
+        setStage("compressing");
+        uploadFile = await compressVideoFile(file, (pct) => setUploadProgress(pct));
+        if (uploadFile.size > MAX_VIDEO_SIZE_BYTES) {
+          throw new Error("Le fichier compressé dépasse encore 50 Mo. Essaie une vidéo plus courte.");
+        }
+      }
+      setStage("uploading"); setUploadProgress(0);
       const sessionRes = await fetch("/api/storage/token");
       const { url, key, userId } = await sessionRes.json();
       const { createClient } = await import("@supabase/supabase-js");
       const sb = createClient(url, key);
-      const ext = file.name.split(".").pop();
+      const ext = uploadFile.name.split(".").pop();
       const storagePath = `${userId}/${Date.now()}.${ext}`;
       await new Promise<void>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = async (ev) => {
           const buf = ev.target?.result;
           setUploadProgress(50);
-          const { error: uploadError } = await sb.storage.from("videos").upload(storagePath, buf as ArrayBuffer, { contentType: file.type || "video/mp4" });
+          const { error: uploadError } = await sb.storage.from("videos").upload(storagePath, buf as ArrayBuffer, { contentType: uploadFile.type || "video/mp4" });
           if (uploadError) { reject(uploadError); return; }
           const { data: signed, error: signError } = await sb.storage.from("videos").createSignedUrl(storagePath, 60 * 60 * 24 * 7);
           setUploadProgress(100);
@@ -244,12 +275,12 @@ export function ZernioPublishModal({
           resolve(undefined);
         };
         reader.onerror = reject;
-        reader.readAsArrayBuffer(file);
+        reader.readAsArrayBuffer(uploadFile);
       });
     } catch (e) {
       setError("Échec de l'upload : " + (e as Error).message);
     } finally {
-      setUploading(false); setUploadProgress(0);
+      setUploading(false); setUploadProgress(0); setStage("idle");
     }
   }
 
@@ -332,7 +363,7 @@ export function ZernioPublishModal({
                   <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}
                     className="text-xs px-3 py-2 rounded-lg font-semibold shrink-0"
                     style={{ background: C.violetBg, color: C.violetLight, border: `1px solid ${C.violet}60`, opacity: uploading ? 0.6 : 1 }}>
-                    {uploading ? `Upload… ${uploadProgress}%` : "📤 Choisir un fichier"}
+                    {uploading ? `${stage === "compressing" ? "Compression" : "Upload"}… ${uploadProgress}%` : "📤 Choisir un fichier"}
                   </button>
                   <input type="url" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)}
                     placeholder="ou colle une URL .mp4" style={{ ...inputStyle, background: "transparent", border: "none", padding: "4px 0" }} />

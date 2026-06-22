@@ -331,3 +331,4 @@ export function LibraryView({ onVideoAdded }: { onVideoAdded: (videos: Video[]) 
     </div>
   );
 }
+ 

@@ -28,6 +28,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       new_followers: body.newFollowers || 0,
       avg_watch_time: body.avgWatchTime || 0,
       completion_rate: body.completionRate || 0,
+      video_url: body.videoUrl ?? undefined,
     })
     .eq("id", params.id)
     .eq("user_id", user.id);

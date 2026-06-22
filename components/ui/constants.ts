@@ -46,7 +46,6 @@ export const TABS = [
   { key: "dashboard", label: "Tableau de bord", icon: "📊" },
   { key: "history",   label: "Historique",      icon: "🏆" },
   { key: "ai",        label: "Analyse IA",      icon: "✦" },
-  { key: "clips",     label: "Découpage",       icon: "✂" },
   { key: "library",   label: "Médiathèque",     icon: "🎞" },
 ];
 

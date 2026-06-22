@@ -6,16 +6,20 @@ import { CalendarView } from "./calendar/CalendarView";
 import { DashboardView } from "./dashboard/DashboardView";
 import { HistoryView } from "./history/HistoryView";
 import { AIAnalysisView } from "./ai/AIAnalysisView";
-import { ClipsView } from "./clips/ClipsView";
 import { LibraryView } from "./library/LibraryView";
 import { VideoModal, ZernioPublishModal } from "./modals/Modals";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+const BOTTOM_NAV_LABELS: Record<string, string> = {
+  calendar: "Calendrier", dashboard: "Stats", history: "Historique",
+  ai: "IA", library: "Médias",
+};
 function emptyForm(): Record<string, string> {
   return {
-    id: "", platform: "tiktok", title: "", hashtags: "", notes: "", entryType: "planned",
+    id: "", platform: "tiktok", platforms: "tiktok", title: "", hashtags: "", notes: "", entryType: "planned",
     scheduledDate: todayStr(), scheduledTime: "18:00", publishedDate: todayStr(), publishedTime: "",
     durationSeconds: "", views: "", likes: "", comments: "", shares: "", saves: "",
     newFollowers: "", avgWatchTime: "", completionRate: "",
@@ -88,9 +92,15 @@ export default function Dashboard() {
 
     const isNew = modalMode === "add";
     if (isNew) {
-      const v = { id: uid(), ...record } as Video;
-      persist([...videos, v]);
-      await fetch("/api/videos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(v) });
+      const platformList = (form.platforms || form.platform || "tiktok")
+        .split(",").map(p => p.trim()).filter(Boolean);
+      const newVideos = (platformList.length ? platformList : [form.platform]).map(platform => ({
+        id: uid(), ...record, platform,
+      })) as Video[];
+      persist([...videos, ...newVideos]);
+      await Promise.all(newVideos.map(v =>
+        fetch("/api/videos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(v) })
+      ));
     } else {
       const next = videos.map(v => v.id === form.id ? { ...v, ...record } as Video : v);
       persist(next);
@@ -249,24 +259,8 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Mobile tabs */}
-          <div className="lg:hidden overflow-x-auto" style={{ background: C.bgAlt, borderBottom: `1px solid ${C.border}` }}>
-            <div className="flex gap-1 p-2 min-w-max">
-              {TABS.map(t => (
-                <button key={t.key} onClick={() => setActiveTab(t.key)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all"
-                  style={{
-                    background: activeTab === t.key ? C.violetBg : "transparent",
-                    color: activeTab === t.key ? C.violetLight : C.textSecondary,
-                  }}>
-                  {t.icon} {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Content */}
-          <div className="p-6">
+          <div className="p-6 pb-24 lg:pb-6">
             <div className="max-w-5xl">
               <div className="mb-7">
                 <h1 className="text-2xl font-bold" style={{ color: C.textPrimary }}>
@@ -290,15 +284,30 @@ export default function Dashboard() {
                 <AIAnalysisView videos={videos} analysis={aiAnalysis} meta={aiMeta}
                   loading={aiLoading} error={aiError} onRun={runAnalysis} />
               )}
-              {activeTab === "clips" && (
-                <ClipsView zernioAccounts={zernioAccounts}
-                  onVideoPublished={v => setVideos(prev => [...prev, v])} />
-              )}
-              {activeTab === "library" && <LibraryView onVideoAdded={v => setVideos(prev => [...prev, v])} />}
+              {activeTab === "library" && <LibraryView onVideoAdded={vs => setVideos(prev => [...prev, ...vs])} />}
             </div>
           </div>
         </main>
       </div>
+
+      {/* Bottom navbar mobile (style application) */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-20 flex"
+        style={{
+          background: C.bgAlt + "F8", backdropFilter: "blur(12px)",
+          borderTop: `1px solid ${C.border}`,
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}>
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            className="flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5 py-2 px-0.5"
+            style={{ color: activeTab === t.key ? C.violetLight : C.textMuted }}>
+            <span style={{ fontSize: "1.15rem", lineHeight: 1 }}>{t.icon}</span>
+            <span className="truncate w-full text-center" style={{ fontSize: "0.58rem", fontWeight: activeTab === t.key ? 700 : 500 }}>
+              {BOTTOM_NAV_LABELS[t.key] || t.label}
+            </span>
+          </button>
+        ))}
+      </nav>
 
       {publishModal && (
         <ZernioPublishModal video={publishModal} accounts={zernioAccounts}

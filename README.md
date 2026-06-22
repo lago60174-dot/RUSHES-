@@ -116,46 +116,24 @@ rushes/
 
 ---
 
-## Phase 4 — Pipeline de découpage vidéo (Render Worker)
+## Phase 5 — Sync automatique des stats (GitHub Actions)
 
-### Prérequis supplémentaires
-- Un compte [OpenAI](https://platform.openai.com) pour l'API Whisper (transcription)
-- Un compte [Render](https://render.com) (free tier suffit pour usage perso)
+La route `app/api/cron/sync-stats` resynchronise les stats Zernio de toutes les
+vidéos publiées sans action manuelle. Elle est déclenchée par un workflow
+GitHub Actions (`.github/workflows/sync-stats.yml`), toutes les 6h.
 
-### Étape A — Supabase Storage
-1. Dans Supabase, va dans **Storage** et crée deux buckets :
-   - `videos` — **privé** (toggle "Public" désactivé)
-   - `clips` — **privé**
-2. Exécute `supabase/phase4.sql` dans l'éditeur SQL pour créer la table `clip_jobs` et les policies.
+### Étape A — Variable d'environnement sur Vercel
+Ajoute `CRON_SECRET` dans **Project Settings > Environment Variables** : une
+chaîne aléatoire de ton choix, par exemple générée avec :
+```bash
+openssl rand -hex 32
+```
 
-### Étape B — Déployer le worker sur Render
+### Étape B — Secrets GitHub
+Dans ton repo GitHub, va dans **Settings > Secrets and variables > Actions**
+et ajoute :
+- `RUSHES_APP_URL` = l'URL de ton app déployée (ex: `https://rushes-xyz.vercel.app`)
+- `CRON_SECRET` = la même valeur que sur Vercel
 
-**Option 1 — via render.yaml (recommandé)**
-1. Pousse ton projet sur GitHub (le dépôt peut être privé).
-2. Sur render.com, clique **New > Blueprint** et connecte ton repo.
-3. Render détecte le `render.yaml` et crée le service `rushes-worker` automatiquement.
-4. Dans les **Environment Variables** du service Render, ajoute :
-   - `SUPABASE_URL` = ta valeur `NEXT_PUBLIC_SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `ANTHROPIC_API_KEY`
-   - `OPENAI_API_KEY`
-   - `WORKER_SECRET` = une chaîne aléatoire de ton choix
-
-**Option 2 — manuellement**
-1. Sur render.com, **New > Web Service** > connecte ton repo > Root Directory : `worker`
-2. Build Command : `npm install`
-3. Start Command : `npm start`
-4. Free tier, puis ajoute les mêmes env vars.
-
-### Étape C — Configurer Vercel
-Dans tes **Environment Variables Vercel**, ajoute :
-- `RENDER_WORKER_URL` = l'URL de ton service Render (ex: `https://rushes-worker.onrender.com`)
-- `WORKER_SECRET` = la même chaîne que dans Render
-
-### Note sur le free tier Render
-L'instance s'endort après 15 min d'inactivité. Le premier appel après une période de veille prend ~30 secondes (le dashboard affiche "démarrage du worker…"). Pour usage perso, c'est largement acceptable.
-
-### Coûts variables Phase 4
-- Whisper API : ~$0.006/min audio → une vidéo d'1h ≈ $0.36
-- Claude (sélection + légendes) : ~$0.01 par traitement de vidéo
-- Supabase Storage : 1 GB gratuit inclus dans le free tier
+Le workflow s'exécute automatiquement toutes les 6h, et tu peux aussi le
+lancer manuellement depuis l'onglet **Actions** du repo (bouton "Run workflow").

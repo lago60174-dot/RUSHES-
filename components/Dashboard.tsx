@@ -294,7 +294,7 @@ export default function Dashboard() {
                 <ClipsView zernioAccounts={zernioAccounts}
                   onVideoPublished={v => setVideos(prev => [...prev, v])} />
               )}
-              {activeTab === "library" && <LibraryView />}
+              {activeTab === "library" && <LibraryView onVideoAdded={v => setVideos(prev => [...prev, v])} />}
             </div>
           </div>
         </main>

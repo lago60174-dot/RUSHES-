@@ -22,6 +22,7 @@ function dbToVideo(row: Record<string, unknown>) {
     newFollowers: row.new_followers,
     avgWatchTime: row.avg_watch_time,
     completionRate: row.completion_rate,
+    videoUrl: row.video_url,
   };
 }
 
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
       new_followers: body.newFollowers || 0,
       avg_watch_time: body.avgWatchTime || 0,
       completion_rate: body.completionRate || 0,
+      video_url: body.videoUrl || null,
     })
     .select()
     .single();

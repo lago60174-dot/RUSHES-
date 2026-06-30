@@ -82,24 +82,37 @@ function AddVideoModal({
       }
 
       setStage("uploading"); setProgress(0);
-      const sessionRes = await fetch("/api/storage/token");
-      const { url, key, userId } = await sessionRes.json();
+      // 1. On demande au serveur (authentifié via cookies) une URL d'upload signée
+      const signRes = await fetch("/api/storage/sign-upload", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: uploadFile.name }),
+      });
+      const signData = await signRes.json();
+      if (!signRes.ok) throw new Error(signData.error || "Échec de préparation de l'upload");
+      const { url, key, path: storagePath, token } = signData;
+
       const { createClient } = await import("@supabase/supabase-js");
       const sb = createClient(url, key);
-      const ext = uploadFile.name.split(".").pop();
-      const storagePath = `${userId}/${Date.now()}.${ext}`;
 
       const signedUrl: string = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = async (ev) => {
           const buf = ev.target?.result;
           setProgress(50);
-          const { error: uploadError } = await sb.storage.from("videos").upload(storagePath, buf as ArrayBuffer, { contentType: uploadFile.type || "video/mp4" });
+          // 2. Upload direct navigateur → Supabase Storage avec le token signé (pas de limite Vercel)
+          const { error: uploadError } = await sb.storage
+            .from("videos")
+            .uploadToSignedUrl(storagePath, token, buf as ArrayBuffer, { contentType: uploadFile.type || "video/mp4" });
           if (uploadError) { reject(uploadError); return; }
-          const { data: signed, error: signError } = await sb.storage.from("videos").createSignedUrl(storagePath, 60 * 60);
+          // 3. On redemande au serveur une URL signée de lecture (RLS-safe)
+          const readRes = await fetch("/api/storage/sign-read", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: storagePath }),
+          });
+          const readData = await readRes.json();
           setProgress(100);
-          if (signError || !signed) { reject(signError || new Error("Échec de génération de l'URL")); return; }
-          resolve(signed.signedUrl);
+          if (!readRes.ok) { reject(new Error(readData.error || "Échec de génération de l'URL")); return; }
+          resolve(readData.signedUrl);
         };
         reader.onerror = reject;
         reader.readAsArrayBuffer(uploadFile);
@@ -331,4 +344,3 @@ export function LibraryView({ onVideoAdded }: { onVideoAdded: (videos: Video[]) 
     </div>
   );
 }
- 
